@@ -1,0 +1,12 @@
+{
+  "domain": "aliyun_bailian_stt",
+  "name": "Aliyun BaiLian STT",
+  "codeowners": ["@climate-station"],
+  "config_flow": true,
+  "documentation": "https://github.com/itning/hass-aliyun_bailian_tts",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "loggers": ["aliyun_bailian_stt"],
+  "requirements": ["dashscope>=1.25.5"],
+  "version": "0.1.0"
+}

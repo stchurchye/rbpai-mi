@@ -1,0 +1,156 @@
+# 语音助手 — 按住 BOOT(GPIO0) 说话，松开结束；需 HA 配置 Voice Assistant 流水线
+# LLM: HA「AI Conversation」集成，Base URL 填 ZenMux OpenAI 兼容端点 https://zenmux.ai/api/v1
+
+i2s_audio:
+  - id: i2s_shared
+    i2s_lrclk_pin: GPIO45
+    i2s_bclk_pin: GPIO9
+    i2s_mclk_pin: GPIO16
+
+audio_dac:
+  - platform: es8311
+    id: es8311_dac
+    i2c_id: board_i2c
+    bits_per_sample: 16bit
+    sample_rate: 16000
+
+audio_adc:
+  - platform: es7210
+    id: es7210_adc
+    i2c_id: board_i2c
+    bits_per_sample: 16bit
+    sample_rate: 16000
+    mic_gain: 24dB
+
+speaker:
+  - platform: i2s_audio
+    id: i2s_audio_speaker
+    i2s_audio_id: i2s_shared
+    i2s_dout_pin: GPIO8
+    dac_type: external
+    audio_dac: es8311_dac
+    channel: left
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    buffer_duration: 100ms
+    timeout: never
+  - platform: resampler
+    id: announcement_speaker
+    output_speaker: i2s_audio_speaker
+
+microphone:
+  - platform: i2s_audio
+    id: va_mic
+    i2s_audio_id: i2s_shared
+    i2s_din_pin: GPIO10
+    adc_type: external
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    pdm: false
+
+media_player:
+  - platform: speaker
+    id: speaker_media_player
+    name: None
+    volume_initial: 70%
+    volume_max: 70%
+    announcement_pipeline:
+      speaker: announcement_speaker
+      format: FLAC
+      sample_rate: 16000
+      num_channels: 1
+    on_announcement:
+      - script.execute: voice_boost_output
+      - lambda: id(voice_announcing) = true;
+      - switch.turn_on: speaker_amp
+      - lambda: id(voice_state) = 4;
+      - component.update: rlcd_display
+    on_idle:
+      - if:
+          condition:
+            lambda: return id(voice_announcing) && id(voice_state) == 4;
+          then:
+            - script.execute: voice_finish
+
+voice_assistant:
+  id: va
+  microphone:
+    microphone: va_mic
+    channels: 0
+    gain_factor: 4
+  media_player: speaker_media_player
+  use_wake_word: false
+  noise_suppression_level: 2
+  auto_gain: 31dBFS
+  on_listening:
+    - lambda: |-
+        id(voice_state) = 1;
+        id(voice_blink) = true;
+    - component.update: rlcd_display
+  on_stt_end:
+    - lambda: id(voice_state) = 3;
+    - component.update: rlcd_display
+  on_intent_start:
+    - lambda: id(voice_state) = 3;
+    - component.update: rlcd_display
+  on_tts_start:
+    - script.execute: voice_boost_output
+    - switch.turn_on: speaker_amp
+    - lambda: id(voice_state) = 4;
+    - component.update: rlcd_display
+  on_tts_end:
+    - script.execute: voice_boost_output
+    - switch.turn_on: speaker_amp
+    - lambda: id(voice_state) = 4;
+    - component.update: rlcd_display
+  on_end:
+    - if:
+        condition:
+          lambda: return id(voice_state) == 4;
+        then:
+          - lambda: ESP_LOGI("voice", "pipeline end, keep playback UI");
+          - script.execute: voice_playback_fallback
+    - if:
+        condition:
+          lambda: return id(voice_state) == 1;
+        then:
+          - script.execute: voice_finish
+  on_error:
+    - lambda: |-
+        id(voice_state) = 5;
+        id(voice_announcing) = false;
+        ESP_LOGW("voice", "error %s: %s", code.c_str(), message.c_str());
+    - component.update: rlcd_display
+    - script.execute: voice_error_reset
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO0
+      inverted: true
+      mode: INPUT
+    name: "${friendly_name} BOOT"
+    id: boot_button
+    on_press:
+      - lambda: |-
+          id(voice_state) = 1;
+          id(voice_blink) = true;
+          id(voice_announcing) = false;
+      - component.update: rlcd_display
+      - switch.turn_on: speaker_amp
+      - voice_assistant.start:
+          id: va
+          silence_detection: false
+    on_release:
+      - if:
+          condition:
+            lambda: return id(voice_state) == 1;
+          then:
+            - voice_assistant.stop:
+      - lambda: |-
+          if (id(voice_state) == 1) {
+            id(voice_state) = 2;
+          }
+      - component.update: rlcd_display
+      - script.execute: voice_session_guard
+      - script.execute: voice_stt_timeout

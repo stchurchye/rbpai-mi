@@ -1,0 +1,8 @@
+# 语音链路调试日志（排查后可删除或注释）
+logger:
+  logs:
+    homeassistant.components.assist_pipeline: debug
+    homeassistant.components.assist_satellite: debug
+    homeassistant.components.stt: debug
+    custom_components.aliyun_bailian_stt: debug
+    custom_components.ai_conversation: debug

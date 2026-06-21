@@ -1,0 +1,17 @@
+# 复制此文件参考，把实体 ID 填入 climate_sensors.yaml 与 climate_automations.yaml
+#
+# 接入小米后，在 HA「开发者工具 → 状态」搜索 temperature
+# 示例实体 ID（请替换为你的）:
+#
+# sensor.living_room_temperature
+# sensor.living_room_humidity
+# sensor.bedroom_temperature
+# sensor.bedroom_humidity
+# sensor.kitchen_temperature
+# ...
+#
+# 手机推送服务名（开发者工具 → 服务 → 搜索 notify）:
+# notify.mobile_app_<你的手机名称>
+#
+# ESPHome 设备名 climate_station → 服务:
+# esphome.climate_station_local_alarm

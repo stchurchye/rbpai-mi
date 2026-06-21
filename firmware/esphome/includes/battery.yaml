@@ -1,0 +1,59 @@
+globals:
+  - id: battery_present
+    type: bool
+    restore_value: false
+    initial_value: "false"
+  - id: battery_charging
+    type: bool
+    restore_value: false
+    initial_value: "false"
+  - id: battery_low
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
+sensor:
+  - platform: adc
+    pin: GPIO4
+    id: bat_voltage
+    name: "${friendly_name} 电池电压"
+    attenuation: 12db
+    update_interval: 30s
+    filters:
+      - median:
+          window_size: 5
+          send_every: 1
+      - multiply: 3.0
+    on_value:
+      then:
+        - component.update: rlcd_display
+
+  - platform: copy
+    source_id: bat_voltage
+    id: bat_level
+    name: "${friendly_name} 电量"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    filters:
+      - calibrate_linear:
+          - 3.0 -> 0.0
+          - 4.12 -> 100.0
+      - clamp:
+          min_value: 0
+          max_value: 100
+
+interval:
+  - interval: 30s
+    then:
+      - lambda: |-
+          float v = id(bat_voltage).state;
+          float pct = id(bat_level).state;
+          bool present = !isnan(v) && v >= 3.0f && v <= 4.25f;
+          id(battery_present) = present;
+          if (present && !isnan(pct)) {
+            id(battery_charging) = (v >= 4.05f && pct < 98.0f);
+            id(battery_low) = (pct <= 20.0f && !id(battery_charging));
+          } else {
+            id(battery_charging) = false;
+            id(battery_low) = false;
+          }

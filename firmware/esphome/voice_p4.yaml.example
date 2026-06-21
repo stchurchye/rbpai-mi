@@ -1,0 +1,12 @@
+# P4 语音扩展（复制为 voice_p4.yaml 并在 climate-station.yaml 末尾 !include）
+# secrets.yaml 需填写: deepseek_api_key, stt_api_key（可选 edge_tts 无需 key）
+#
+# 用法:
+#   cp voice_p4.yaml.example voice_p4.yaml
+#   在 climate-station.yaml 末尾取消: # voice: !include voice_p4.yaml
+
+# i2s_audio:
+#   ...
+# http_request:
+#   ...
+# 长按 KEY → 录音 → STT → DeepSeek → TTS → 扬声器

@@ -1,0 +1,116 @@
+{
+  "config": {
+    "flow_title": "配置集成",
+    "step": {
+      "user": {
+        "title": "开始配置",
+        "description": "{tip}",
+        "data": {
+          "service": "服务商",
+          "base": "接口",
+          "api_key": "密钥"
+        },
+        "data_description": {
+          "base": "例如: `https://api.openai.com/v1`\n<br/><br/>\n"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "已存在"
+    },
+    "error": {
+      "cannot_connect": "无法连接",
+      "invalid_auth": "授权失败"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "集成选项",
+        "description": "{tip}",
+        "data": {
+          "service": "服务商",
+          "base": "接口",
+          "api_key": "密钥"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接",
+      "invalid_auth": "授权失败"
+    }
+  },
+  "config_subentries": {
+    "conversation": {
+      "entry_type": "对话模型",
+      "initiate_flow": {
+        "user": "添加对话模型",
+        "reconfigure": "配置对话模型"
+      },
+      "step": {
+        "init": {
+          "description": "{tip}",
+          "data": {
+            "model": "模型",
+            "name": "名称",
+            "prompt": "提示词",
+            "llm_hass_api": "控制 & 工具"
+          },
+          "data_description": {
+            "model": "指定该对话要使用的模型"
+          }
+        }
+      },
+      "abort": {
+        "reconfigure_successful": "配置成功"
+      }
+    },
+    "tts": {
+      "entry_type": "文本转语音模型",
+      "initiate_flow": {
+        "user": "添加TTS模型",
+        "reconfigure": "配置TTS模型"
+      },
+      "step": {
+        "init": {
+          "description": "{tip}",
+          "data": {
+            "model": "模型",
+            "full_input": "完整输入内容",
+            "extra_body": "额外的请求参数(yaml)"
+          },
+          "data_description": {
+            "model": "指定支持文本转语音的模型",
+            "full_input": "要求输入的文本内容必须完整"
+          }
+        }
+      },
+      "abort": {
+        "reconfigure_successful": "配置成功"
+      }
+    },
+    "stt": {
+      "entry_type": "语音转文本模型",
+      "initiate_flow": {
+        "user": "添加STT模型",
+        "reconfigure": "配置STT模型"
+      },
+      "step": {
+        "init": {
+          "description": "{tip}",
+          "data": {
+            "model": "模型",
+            "extra_body": "额外的请求参数(yaml)"
+          },
+          "data_description": {
+            "model": "指定支持语音转文本的模型"
+          }
+        }
+      },
+      "abort": {
+        "reconfigure_successful": "配置成功"
+      }
+    }
+  },
+  "entity": {}
+}

@@ -1,0 +1,507 @@
+# Waveshare ESP32-S3-RLCD-4.2 — 家用气候站
+# 文档: docs/project-ha-climate-station.md
+# 配置: bash scripts/sync-ha-entities.sh 生成 substitutions / 传感器
+# 烧录: bash scripts/flash-esp.sh
+
+substitutions: !include generated_substitutions.yaml
+
+packages:
+  climate_ha: !include generated/climate_ha_sensors.yaml
+  voice: !include includes/voice_assistant.yaml
+  battery: !include includes/battery.yaml
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  platformio_options:
+    board_build.arduino.memory_type: qio_opi
+    board_build.flash_mode: dio
+  on_boot:
+    priority: 600
+    then:
+      - switch.turn_on: speaker_amp
+      - script.execute: voice_boost_output
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  framework:
+    type: esp-idf
+    version: recommended
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
+      CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP: "y"
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+external_components:
+  - source:
+      type: local
+      path: external_components
+    components: [voice_assistant, es8311, i2s_audio]
+  - source: github://kylehase/ESPHome-ST7305-RLCD
+    components: [st7305_rlcd]
+    refresh: 0s
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${friendly_name} Fallback"
+    password: !secret wifi_password
+
+captive_portal:
+
+api:
+  max_connections: 12
+  encryption:
+    key: !secret api_encryption_key
+  services:
+    - service: local_alarm
+      variables:
+        room: string
+        temp: string
+      then:
+        - lambda: |-
+            id(alarm_room) = room;
+            id(alarm_temp) = temp;
+            id(alarm_active) = true;
+        - script.execute: alarm_flash
+
+ota:
+  - platform: esphome
+    password: ""
+
+logger:
+
+i2c:
+  sda: GPIO13
+  scl: GPIO14
+  id: board_i2c
+
+sensor:
+  - platform: sht3xd
+    address: 0x70
+    temperature:
+      name: "ClimateSta Onboard Temp"
+      id: board_temp
+    humidity:
+      name: "ClimateSta Onboard Humi"
+      id: board_humi
+
+globals:
+  - id: display_page
+    type: int
+    restore_value: false
+    initial_value: "0"
+  - id: alarm_active
+    type: bool
+    restore_value: false
+    initial_value: "false"
+  - id: alarm_room
+    type: std::string
+    restore_value: false
+    initial_value: ""
+  - id: alarm_temp
+    type: std::string
+    restore_value: false
+    initial_value: ""
+  - id: ha_api_connected
+    type: bool
+    restore_value: false
+    initial_value: "false"
+  - id: voice_state
+    type: int
+    restore_value: false
+    initial_value: "0"
+  - id: voice_blink
+    type: bool
+    restore_value: false
+    initial_value: "false"
+  - id: voice_announcing
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO18
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "${friendly_name} KEY"
+    id: key_button
+    on_press:
+      then:
+        - component.update: rlcd_display
+
+  - platform: status
+    name: "${friendly_name} HA 已连接"
+    id: ha_status
+    on_state:
+      then:
+        - lambda: id(ha_api_connected) = x;
+
+switch:
+  - platform: gpio
+    pin: GPIO46
+    name: "${friendly_name} 功放"
+    id: speaker_amp
+    restore_mode: RESTORE_DEFAULT_ON
+
+spi:
+  clk_pin: GPIO11
+  mosi_pin: GPIO12
+  id: display_spi
+
+font:
+  - file: "gfonts://Noto Sans SC"
+    id: font_large
+    size: 22
+    glyphs: "${font_glyphs}"
+  - file: "gfonts://Noto Sans SC"
+    id: font_main
+    size: 17
+    glyphs: "${font_glyphs}"
+  - file: "gfonts://Noto Sans SC"
+    id: font_small
+    size: 14
+    glyphs: "${font_glyphs}"
+
+display:
+  - platform: st7305_rlcd
+    id: rlcd_display
+    model: WAVESHARE_400X300
+    cs_pin: GPIO40
+    dc_pin: GPIO5
+    reset_pin: GPIO41
+    spi_id: display_spi
+    rotation: 0
+    update_interval: 15s
+    lambda: |-
+      const int w = it.get_width();
+      const int h = it.get_height();
+      const int room_count = ${room_count};
+      bool inv = id(alarm_active);
+      auto fg = inv ? COLOR_OFF : COLOR_ON;
+      auto bg = inv ? COLOR_ON : COLOR_OFF;
+      it.filled_rectangle(0, 0, w, h, bg);
+
+      auto fmt1 = [&](float v) -> std::string {
+        if (isnan(v)) return "--";
+        char b[16];
+        snprintf(b, sizeof(b), "%.1f", v);
+        return std::string(b);
+      };
+
+      auto fmt0 = [&](float v) -> std::string {
+        if (isnan(v)) return "--";
+        char b[16];
+        snprintf(b, sizeof(b), "%.0f", v);
+        return std::string(b);
+      };
+
+      auto draw_status_bar = [&]() {
+        std::string line1 = id(ha_api_connected) ? "已连接" : "未连接";
+        if (id(battery_present)) {
+          float pct = id(bat_level).state;
+          if (!isnan(pct)) {
+            std::string bat = fmt0(pct) + "%";
+            if (id(battery_charging)) {
+              bat = "充电" + bat;
+            }
+            line1 += " " + bat;
+          }
+        }
+        it.print(w - 4, 4, id(font_small), fg, TextAlign::TOP_RIGHT, line1.c_str());
+        if (id(battery_low)) {
+          it.print(w - 4, 18, id(font_small), fg, TextAlign::TOP_RIGHT, "尽快充电");
+        }
+      };
+
+      if (id(voice_state) != 0) {
+        fg = COLOR_ON;
+        bg = COLOR_OFF;
+        it.filled_rectangle(0, 0, w, h, bg);
+
+        const int step_x[4] = {80, 160, 240, 320};
+        const char *step_labels[4] = {"听", "识别", "思考", "播报"};
+        const char *status_text = "";
+        switch (id(voice_state)) {
+          case 1: status_text = "正在听"; break;
+          case 2: status_text = "识别中"; break;
+          case 3: status_text = "思考中"; break;
+          case 4: status_text = "播报中"; break;
+          case 5: status_text = "语音失败"; break;
+          default: status_text = ""; break;
+        }
+
+        it.print(w / 2, 40, id(font_main), fg, TextAlign::TOP_CENTER, "语音交互");
+
+        const int dot_y = 108;
+        const int dot_r = 5;
+        for (int i = 0; i < 4; i++) {
+          int cx = step_x[i];
+          if (id(voice_state) == 5) {
+            it.circle(cx, dot_y, dot_r, fg);
+          } else if (id(voice_state) > i + 1) {
+            it.filled_circle(cx, dot_y, dot_r, fg);
+          } else if (id(voice_state) == i + 1) {
+            if (i == 0 && id(voice_state) == 1 && !id(voice_blink)) {
+              it.circle(cx, dot_y, dot_r, fg);
+            } else {
+              it.filled_circle(cx, dot_y, dot_r, fg);
+            }
+          } else {
+            it.circle(cx, dot_y, dot_r, fg);
+          }
+          if (i < 3) {
+            it.line(step_x[i] + dot_r + 2, dot_y, step_x[i + 1] - dot_r - 2, dot_y, fg);
+          }
+          it.print(cx, 122, id(font_small), fg, TextAlign::TOP_CENTER, step_labels[i]);
+        }
+
+        it.print(w / 2, 160, id(font_large), fg, TextAlign::TOP_CENTER, status_text);
+        if (id(voice_state) == 1) {
+          it.print(w / 2, 220, id(font_small), fg, TextAlign::TOP_CENTER, "松开结束录音");
+        }
+        draw_status_bar();
+      } else {
+      auto room_temp = [&](int idx) -> float {
+        switch (idx) {
+          case 1: return id(ha_room1_temp).state;
+          case 2: return id(ha_room2_temp).state;
+          case 3: return id(ha_room3_temp).state;
+          case 4: return id(ha_room4_temp).state;
+          case 5: return id(ha_room5_temp).state;
+          case 6: return id(ha_room6_temp).state;
+          case 7: return id(ha_room7_temp).state;
+          case 8: return id(ha_room8_temp).state;
+          default: return NAN;
+        }
+      };
+
+      auto room_humi = [&](int idx) -> float {
+        switch (idx) {
+          case 1: return id(ha_room1_humi).state;
+          case 2: return id(ha_room2_humi).state;
+          case 3: return id(ha_room3_humi).state;
+          case 4: return id(ha_room4_humi).state;
+          case 5: return id(ha_room5_humi).state;
+          case 6: return id(ha_room6_humi).state;
+          case 7: return id(ha_room7_humi).state;
+          case 8: return id(ha_room8_humi).state;
+          default: return NAN;
+        }
+      };
+
+      auto room_max = [&](int idx) -> float {
+        switch (idx) {
+          case 1: return id(ha_room1_max).state;
+          case 2: return id(ha_room2_max).state;
+          case 3: return id(ha_room3_max).state;
+          case 4: return id(ha_room4_max).state;
+          case 5: return id(ha_room5_max).state;
+          case 6: return id(ha_room6_max).state;
+          case 7: return id(ha_room7_max).state;
+          case 8: return id(ha_room8_max).state;
+          default: return NAN;
+        }
+      };
+
+      auto room_min = [&](int idx) -> float {
+        switch (idx) {
+          case 1: return id(ha_room1_min).state;
+          case 2: return id(ha_room2_min).state;
+          case 3: return id(ha_room3_min).state;
+          case 4: return id(ha_room4_min).state;
+          case 5: return id(ha_room5_min).state;
+          case 6: return id(ha_room6_min).state;
+          case 7: return id(ha_room7_min).state;
+          case 8: return id(ha_room8_min).state;
+          default: return NAN;
+        }
+      };
+
+      auto room_label = [&](int idx) -> const char * {
+        switch (idx) {
+          case 1: return "${room1_label}";
+          case 2: return "${room2_label}";
+          case 3: return "${room3_label}";
+          case 4: return "${room4_label}";
+          case 5: return "${room5_label}";
+          case 6: return "${room6_label}";
+          case 7: return "${room7_label}";
+          case 8: return "${room8_label}";
+          default: return "";
+        }
+      };
+
+      const int hi_rooms[] = { ${highlight_room_indices} };
+      const int hi_count = sizeof(hi_rooms) / sizeof(hi_rooms[0]);
+      const int norm_rooms[] = { ${normal_room_indices} };
+      const int norm_count = sizeof(norm_rooms) / sizeof(norm_rooms[0]);
+
+      auto draw_room = [&](int idx, int x, int y, bool big) {
+        const char *lb = room_label(idx);
+        if (lb[0] == '\0') return;
+        if (big) {
+          it.print(x, y, id(font_main), fg, lb);
+          std::string now = fmt1(room_temp(idx)) + "度";
+          it.print(x, y + 18, id(font_large), fg, now.c_str());
+          std::string hum = fmt0(room_humi(idx)) + "%";
+          it.print(x + 72, y + 22, id(font_small), fg, hum.c_str());
+          std::string hi_lo = "今高" + fmt1(room_max(idx)) + " 今低" + fmt1(room_min(idx));
+          it.print(x, y + 44, id(font_small), fg, hi_lo.c_str());
+        } else {
+          it.print(x, y, id(font_small), fg, lb);
+          std::string now = fmt1(room_temp(idx)) + "度";
+          it.print(x + 72, y, id(font_main), fg, now.c_str());
+          std::string hi_lo = "高" + fmt1(room_max(idx)) + " 低" + fmt1(room_min(idx));
+          it.print(x, y + 16, id(font_small), fg, hi_lo.c_str());
+        }
+      };
+
+      it.print(4, 4, id(font_small), fg, "模拟安第斯山脉温室监控");
+      draw_status_bar();
+
+      int y = 26;
+      if (id(ha_api_connected)) {
+        std::string sum = "最热 " + id(ha_hottest_room_text).state + " " +
+                          fmt1(id(ha_hottest_temp).state) + "度  室外 " +
+                          fmt1(id(ha_outdoor_temp).state) + "度  告警超" +
+                          fmt0(id(ha_alert_threshold).state) + "度";
+        it.print(4, y, id(font_small), fg, sum.c_str());
+      } else {
+        it.print(4, y, id(font_small), fg, "未连接 请检查网络");
+      }
+
+      const int zone_top = 46;
+      const int zone_h = 168;
+      it.rectangle(4, zone_top, w - 8, zone_h, fg);
+      it.print(8, zone_top + 2, id(font_small), fg, "花房区");
+
+      const int hi_col_x[2] = {12, 208};
+      const int hi_row_h = 78;
+      for (int i = 0; i < hi_count; i++) {
+        int col = i % 2;
+        int row = i / 2;
+        draw_room(hi_rooms[i], hi_col_x[col], zone_top + 18 + row * hi_row_h, true);
+      }
+
+      const int norm_y = zone_top + zone_h + 8;
+      it.print(8, norm_y, id(font_small), fg, "其他");
+      const int norm_col_x[2] = {12, 208};
+      for (int i = 0; i < norm_count; i++) {
+        draw_room(norm_rooms[i], norm_col_x[i], norm_y + 16, false);
+      }
+
+      if (id(alarm_active)) {
+        std::string al = "告警 " + id(alarm_room) + " " + id(alarm_temp) + "度";
+        it.print(4, h - 52, id(font_main), fg, al.c_str());
+      }
+      }
+
+      it.print(4, h - 18, id(font_small), fg, "按住说话  点按刷新");
+
+script:
+  - id: voice_boost_output
+    mode: restart
+    then:
+      - switch.turn_on: speaker_amp
+      - media_player.volume_set:
+          id: speaker_media_player
+          volume: 70%
+      - lambda: |-
+          id(es8311_dac).set_volume(0.7f);
+          id(i2s_audio_speaker).set_volume(0.7f);
+          id(announcement_speaker).set_volume(0.7f);
+  - id: voice_error_reset
+    mode: restart
+    then:
+      - delay: 3s
+      - lambda: |-
+          if (id(voice_state) == 5) {
+            id(voice_state) = 0;
+          }
+      - component.update: rlcd_display
+  - id: voice_stt_timeout
+    mode: restart
+    then:
+      - delay: 15s
+      - lambda: |-
+          if (id(voice_state) == 2) {
+            id(voice_state) = 5;
+          }
+      - if:
+          condition:
+            lambda: return id(voice_state) == 5;
+          then:
+            - component.update: rlcd_display
+            - script.execute: voice_error_reset
+  - id: voice_finish
+    mode: restart
+    then:
+      - lambda: |-
+          id(voice_announcing) = false;
+          id(voice_state) = 0;
+          id(voice_blink) = false;
+      - component.update: rlcd_display
+  - id: voice_playback_fallback
+    mode: restart
+    then:
+      - delay: 45s
+      - if:
+          condition:
+            lambda: return id(voice_state) == 4 && !id(voice_announcing);
+          then:
+            - script.execute: voice_finish
+  - id: voice_session_guard
+    mode: restart
+    then:
+      - delay: 60s
+      - if:
+          condition:
+            lambda: return !id(voice_announcing);
+          then:
+            - lambda: |-
+                if (id(voice_state) >= 2 && id(voice_state) <= 4) {
+                  id(voice_state) = 0;
+                }
+            - component.update: rlcd_display
+            - switch.turn_off: speaker_amp
+  - id: alarm_flash
+    mode: restart
+    then:
+      - switch.turn_on: speaker_amp
+      - repeat:
+          count: 15
+          then:
+            - lambda: id(alarm_active) = !id(alarm_active);
+            - component.update: rlcd_display
+            - delay: 1s
+      - lambda: id(alarm_active) = false;
+      - component.update: rlcd_display
+      - switch.turn_off: speaker_amp
+
+interval:
+  - interval: 500ms
+    then:
+      - if:
+          condition:
+            lambda: return id(voice_state) == 1;
+          then:
+            - lambda: id(voice_blink) = !id(voice_blink);
+            - component.update: rlcd_display
+  - interval: 2s
+    then:
+      - if:
+          condition:
+            lambda: return id(alarm_active);
+          then:
+            - component.update: rlcd_display
+
+# P4 云端直连（可选）见 voice_p4.yaml.example
+# 当前使用 HA Voice Assistant 流水线（includes/voice_assistant.yaml）

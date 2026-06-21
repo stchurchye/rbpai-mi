@@ -1,0 +1,15 @@
+# Home Assistant Core — 树莓派 Docker 部署
+# 用法: 见 scripts/setup-ha.sh
+
+services:
+  homeassistant:
+    container_name: homeassistant
+    image: ghcr.io/home-assistant/home-assistant:stable
+    volumes:
+      - ./config:/config
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    environment:
+      - TZ=Asia/Shanghai

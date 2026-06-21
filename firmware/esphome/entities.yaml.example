@@ -1,0 +1,8 @@
+# 已废弃：请使用自动化脚本
+#
+#   cp config/ha.env.example config/ha.env   # 填 HA_URL + TOKEN
+#   bash scripts/sync-ha-entities.sh
+#
+# 或离线示例：
+#   cp config/climate_rooms.json.example config/climate_rooms.json
+#   python3 scripts/generate_climate_config.py

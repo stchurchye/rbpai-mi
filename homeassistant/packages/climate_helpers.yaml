@@ -1,0 +1,24 @@
+# 气候站 — 可配置辅助元素
+# 在 HA：设置 → 辅助元素 中也可修改
+
+input_number:
+  climate_alert_threshold:
+    name: 高温告警温度
+    min: 20
+    max: 40
+    step: 0.5
+    unit_of_measurement: "°C"
+    mode: box
+    initial: 30
+    icon: mdi:thermometer-alert
+
+input_boolean:
+  climate_alert_enabled:
+    name: 启用高温告警
+    initial: true
+    icon: mdi:bell-ring
+
+  climate_alert_night_mute_sound:
+    name: 夜间静音板子蜂鸣
+    initial: false
+    icon: mdi:volume-off

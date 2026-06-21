@@ -1,0 +1,17 @@
+# 气候站 — 静态模板传感器（室外温度等）
+# 房间传感器由 climate_rooms_sensors.yaml 自动生成
+
+template:
+  - sensor:
+      - name: "气候站_室外温度"
+        unique_id: climate_outdoor_temp
+        entity_id: sensor.climate_outdoor_temp
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: >
+          {% set w = states.weather | first %}
+          {% if w %}
+            {{ state_attr(w.entity_id, 'temperature') }}
+          {% else %}
+            unavailable
+          {% endif %}

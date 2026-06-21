@@ -1,0 +1,2 @@
+# 高温告警自动化已迁移至 climate_rooms_automations.yaml（自动生成）
+# 运行: bash scripts/sync-ha-entities.sh

@@ -1,0 +1,18 @@
+{
+  "_comment": "由 scripts/fetch_ha_entities.py 生成，可手工编辑 label。勿提交 Git。",
+  "rooms": [
+    {
+      "label": "客厅",
+      "temp": "sensor.living_room_temperature",
+      "humidity": "sensor.living_room_humidity"
+    },
+    {
+      "label": "卧室",
+      "temp": "sensor.bedroom_temperature",
+      "humidity": "sensor.bedroom_humidity"
+    }
+  ],
+  "outdoor_temp_entity": "sensor.climate_outdoor_temp",
+  "notify_service": "notify.notify",
+  "unpaired": []
+}

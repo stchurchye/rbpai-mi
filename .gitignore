@@ -1,0 +1,29 @@
+# Secrets & local config
+**/secrets.yaml
+homeassistant/config/
+homeassistant/.env
+config/ha.env
+config/climate_rooms.json
+*.pem
+
+# Generated configs (regenerate via scripts/sync-ha-entities.sh)
+homeassistant/packages/climate_rooms_sensors.yaml
+homeassistant/packages/climate_rooms_automations.yaml
+firmware/esphome/generated_substitutions.yaml
+firmware/esphome/generated/
+**/generated_*
+
+# ESPHome build
+.esphome/
+firmware/esphome/.esphome/
+firmware/esphome/secrets.yaml
+
+# Python venv
+.venv-esphome/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
