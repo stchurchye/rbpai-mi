@@ -8,6 +8,7 @@ services:
     volumes:
       - ./config:/config
       - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro      # 本地蓝牙所需(BlueZ over D-Bus)
     restart: unless-stopped
     privileged: true
     network_mode: host
